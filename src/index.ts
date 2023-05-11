@@ -30,7 +30,7 @@ export type SqliteLevelOptions<K, V> = {
 declare type BatchOperation = BatchPutOperation | BatchDelOperation
 
 /**
- * A _put_ operation to be committed by a {@link DynamodbLevel}.
+ * A _put_ operation to be committed by a {@link SqliteLevel}.
  */
 declare interface BatchPutOperation {
   /**
@@ -50,7 +50,7 @@ declare interface BatchPutOperation {
 }
 
 /**
- * A _del_ operation to be committed by a {@link DynamodbLevel}.
+ * A _del_ operation to be committed by a {@link SqliteLevel}.
  */
 declare interface BatchDelOperation {
   /**
