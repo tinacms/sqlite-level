@@ -33,7 +33,11 @@
     "dev": "tinacms-scripts dev",
     "test": "jest --coverage",
     "types": "tsc",
-    "docs": "npx typedoc"
+    "docs": "npx typedoc",
+    "version": "pnpm exec changeset version",
+    "version:snapshot": "pnpm exec changeset version --snapshot",
+    "publish": "pnpm publish -r --no-git-checks --access public",
+    "publish:beta": "pnpm publish -r --tag beta --no-git-checks --access public"
   },
   "dependencies": {
     "module-error": "^1.0.2",
