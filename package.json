@@ -32,6 +32,7 @@
     "build": "tinacms-scripts build",
     "dev": "tinacms-scripts dev",
     "test": "jest --coverage",
+    "types": "tsc",
     "docs": "npx typedoc"
   },
   "dependencies": {
