@@ -1,5 +1,0 @@
----
-"sqlite-level": patch
----
-
-Cleanup
