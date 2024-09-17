@@ -189,7 +189,7 @@ class SqliteValueIterator<KDefault, VDefault> extends AbstractValueIterator<
 }
 
 export class SqliteLevel<KDefault = string, VDefault = string> extends AbstractLevel<Buffer | Uint8Array | string, KDefault, VDefault> {
-  public db: any
+  public db: Database.Database
   private readOnly: boolean = false
 
   constructor(options: SqliteLevelOptions<KDefault, VDefault>) {
@@ -218,7 +218,7 @@ export class SqliteLevel<KDefault = string, VDefault = string> extends AbstractL
 
   async _get(key: Buffer, options: any, callback: (error?: Error, value?: Buffer) => void) {
     const stmt = this.db.prepare('SELECT value FROM kv WHERE key = ?')
-    const row = stmt.get(key.toString())
+    const row = stmt.get(key.toString()) as any
     if (row) {
       return this.nextTick(callback, null, row.value)
     } else {

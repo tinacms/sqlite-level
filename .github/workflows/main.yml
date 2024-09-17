@@ -14,26 +14,22 @@ jobs:
         os:
           - ubuntu-latest
           - macOS-latest
-        #  - windows-latest
-        node-version: [14.x]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 15
 
     steps:
-      - name: Check out code
-        uses: actions/checkout@v2
+      - uses: actions/checkout@v4
         with:
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
           fetch-depth: 2
 
-      - uses: pnpm/action-setup@v2.2.2
+      - uses: pnpm/action-setup@v4
         with:
-          version: 7.4.0
+          package_json_file: package.json
 
       - name: Setup Node.js environment
-        uses: actions/setup-node@v2
+        uses: actions/setup-node@v4
         with:
-          node-version: 16
+          node-version-file: .nvmrc
           cache: "pnpm"
 
       - name: Install dependencies
@@ -41,9 +37,6 @@ jobs:
 
       - name: Build
         run: pnpm build
-
-      #      - name: Build Types
-      #        run: pnpm types
 
       - name: Test
         run: pnpm test
