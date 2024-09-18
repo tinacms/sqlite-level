@@ -90,6 +90,15 @@ jobs:
         env:
           NPM_AUTH_TOKEN: ${{ secrets.NPM_AUTH_TOKEN }}
 
+      - name: Publish beta
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          pnpm version:snapshot
+          pnpm publish -r --tag beta --no-git-checks --access public
+        env:
+          GITHUB_TOKEN: ${{ steps.generate-token.outputs.token || secrets.GITHUB_TOKEN }}
+          NPM_AUTH_TOKEN: ${{ secrets.NPM_AUTH_TOKEN }}
+
       - name: Create Release Pull Request
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         id: changesets
@@ -98,15 +107,6 @@ jobs:
           version: pnpm run version
         env:
           GITHUB_TOKEN: ${{ steps.generate-token.outputs.token || secrets.GITHUB_TOKEN  }}
-
-      - name: Publish beta
-        if: steps.changesets.conclusion == 'success' && steps.changesets.outputs.hasChangesets == 'true'
-        run: |
-          pnpm version:snapshot
-          pnpm publish -r --tag beta --no-git-checks --access public
-        env:
-          GITHUB_TOKEN: ${{ steps.generate-token.outputs.token || secrets.GITHUB_TOKEN }}
-          NPM_AUTH_TOKEN: ${{ secrets.NPM_AUTH_TOKEN }}
 
       - name: Publish release
         if: steps.changesets.conclusion == 'success' && steps.changesets.outputs.hasChangesets == 'false'
