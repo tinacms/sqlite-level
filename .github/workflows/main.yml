@@ -97,10 +97,10 @@ jobs:
         with:
           version: pnpm run version
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ steps.generate-token.outputs.token || secrets.GITHUB_TOKEN  }}
 
-      - name: Publish previews
-        if: steps.changesets.conclusion == 'skipped'
+      - name: Publish beta
+        if: steps.changesets.conclusion == 'success' && steps.changesets.outputs.hasChangesets == 'true'
         run: |
           pnpm version:snapshot
           pnpm publish -r --tag beta --no-git-checks --access public
@@ -108,7 +108,7 @@ jobs:
           GITHUB_TOKEN: ${{ steps.generate-token.outputs.token || secrets.GITHUB_TOKEN }}
           NPM_AUTH_TOKEN: ${{ secrets.NPM_AUTH_TOKEN }}
 
-      - name: Publish
+      - name: Publish release
         if: steps.changesets.conclusion == 'success' && steps.changesets.outputs.hasChangesets == 'false'
         run: |
           pnpm publish -r --no-git-checks --access public
@@ -116,3 +116,14 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ steps.generate-token.outputs.token || secrets.GITHUB_TOKEN }}
           NPM_AUTH_TOKEN: ${{ secrets.NPM_AUTH_TOKEN }}
+
+      - name: Publish tagged PR
+        if: steps.changesets.conclusion == 'skipped' && contains(github.event.pull_request.labels.*.name, 'tagged')
+        run: |
+          echo running on branch ${BRANCH_NAME}
+          pnpm version:snapshot
+          pnpm publish -r --tag ${BRANCH_NAME} --no-git-checks --access public
+        env:
+          GITHUB_TOKEN: ${{ steps.generate-token.outputs.token || secrets.GITHUB_TOKEN }}
+          NPM_AUTH_TOKEN: ${{ secrets.NPM_AUTH_TOKEN }}
+          BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
