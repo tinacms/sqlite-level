@@ -5,7 +5,7 @@ on:
     branches:
       - main
   pull_request:
-    types: [opened, synchronize, reopened]
+    types: [opened, synchronize, reopened,labeled]
 
 jobs:
   build:
@@ -40,3 +40,17 @@ jobs:
 
       - name: Test
         run: pnpm test
+
+      - name: Publish tagged PR
+        if: >
+          matrix.os == 'ubuntu-latest' &&
+          github.event_name == 'pull_request' &&
+          contains(github.event.pull_request.labels.*.name, 'tagged')
+        continue-on-error: true
+        run: |
+          echo running on branch ${BRANCH_NAME}
+          pnpm version:snapshot
+          pnpm publish -r --tag ${BRANCH_NAME} --no-git-checks --access public
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
