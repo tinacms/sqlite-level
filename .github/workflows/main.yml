@@ -90,15 +90,6 @@ jobs:
         env:
           NPM_AUTH_TOKEN: ${{ secrets.NPM_AUTH_TOKEN }}
 
-      - name: Publish beta
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        run: |
-          pnpm version:snapshot
-          pnpm publish -r --tag beta --no-git-checks --access public
-        env:
-          GITHUB_TOKEN: ${{ steps.generate-token.outputs.token || secrets.GITHUB_TOKEN }}
-          NPM_AUTH_TOKEN: ${{ secrets.NPM_AUTH_TOKEN }}
-
       - name: Create Release Pull Request
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         id: changesets
@@ -111,7 +102,7 @@ jobs:
       - name: Publish beta
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: |
-          pnpm version:snapshot
+          pnpm exec changeset version --snapshot
           pnpm publish -r --tag beta --no-git-checks --access public
         env:
           GITHUB_TOKEN: ${{ steps.generate-token.outputs.token || secrets.GITHUB_TOKEN }}
@@ -130,7 +121,7 @@ jobs:
         if: steps.changesets.conclusion == 'skipped' && contains(github.event.pull_request.labels.*.name, 'tagged')
         run: |
           echo running on branch ${BRANCH_NAME}
-          pnpm version:snapshot
+          pnpm exec changeset version --snapshot
           pnpm publish -r --tag ${BRANCH_NAME} --no-git-checks --access public
         env:
           GITHUB_TOKEN: ${{ steps.generate-token.outputs.token || secrets.GITHUB_TOKEN }}
