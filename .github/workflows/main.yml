@@ -89,16 +89,13 @@ jobs:
         if: steps.changesets.outputs.hasChangesets == 'true'
         run: |
           pnpm exec changeset version --snapshot
-          pnpm publish -r --no-git-checks --access public --tag beta
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_AUTH_TOKEN }}
 
-      - name: Publish release
-        if: steps.changesets.outputs.hasChangesets == 'false'
-        run: |
-          pnpm publish -r --no-git-checks --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_AUTH_TOKEN }}
+      - uses: JS-DevTools/npm-publish@v3
+        name: Publish to NPM
+        with:
+          access: public
+          tag: ${{ steps.changesets.outputs.hasChangesets == 'true' && 'beta' || 'latest' }}
+          token: ${{ secrets.NPM_AUTH_TOKEN }}
         
   publish-pr:
     name: Publish PR preview
@@ -131,9 +128,11 @@ jobs:
 
       - name: Publish tagged PR
         run: |
-          echo running on branch ${BRANCH_NAME}
           pnpm exec changeset version --snapshot
-          pnpm publish -r --tag ${BRANCH_NAME} --no-git-checks --access public
-        env:
-          BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_AUTH_TOKEN }}
+
+      - uses: JS-DevTools/npm-publish@v3
+        name: Publish to NPM
+        with:
+          access: public
+          tag: ${{ github.head_ref || github.ref_name }}
+          token: ${{ secrets.NPM_AUTH_TOKEN }}
