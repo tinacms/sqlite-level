@@ -42,7 +42,7 @@ jobs:
 
       - name: Test
         run: pnpm test
-  
+
   publish:
     name: Publish to NPM or Create Version PR
     needs: build
@@ -77,6 +77,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install
 
+      - name: Build
+        run: pnpm build
+
       - name: Create Release Pull Request
         id: changesets
         uses: changesets/action@v1
@@ -91,14 +94,14 @@ jobs:
           timestamp=$(date +'%Y%m%d%H%M%S')
           jq --arg version "0.0.0-$timestamp" '.version = $version' package.json > package.tmp.json
           mv package.tmp.json package.json
-          
+
       - uses: JS-DevTools/npm-publish@v3
         name: Publish to NPM
         with:
           access: public
           tag: ${{ steps.changesets.outputs.hasChangesets == 'true' && 'beta' || 'latest' }}
           token: ${{ secrets.NPM_AUTH_TOKEN }}
-        
+
   publish-pr:
     name: Publish PR preview
     needs: build
@@ -107,7 +110,6 @@ jobs:
       contains(github.event.pull_request.labels.*.name, 'tagged')
     runs-on: ubuntu-latest
     steps:
-
       - uses: actions/checkout@v4
 
       - uses: pnpm/action-setup@v4
