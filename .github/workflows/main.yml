@@ -9,6 +9,7 @@ on:
 
 jobs:
   build:
+    name: Build
     strategy:
       matrix:
         os:
@@ -25,6 +26,7 @@ jobs:
       - uses: pnpm/action-setup@v4
         with:
           package_json_file: package.json
+          run_install: false
 
       - name: Setup Node.js environment
         uses: actions/setup-node@v4
@@ -41,21 +43,102 @@ jobs:
       - name: Test
         run: pnpm test
 
-      - name: Set NPMRC
-        run: echo "//registry.npmjs.org/:_authToken=${NPM_AUTH_TOKEN}" > .npmrc
-        env:
-          NPM_AUTH_TOKEN: ${{ secrets.NPM_AUTH_TOKEN }}
+  publish:
+    name: Publish to NPM or Create Version PR
+    needs: build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Generate a token
+        uses: actions/create-github-app-token@v1
+        id: generate-token
+        with:
+          # uses https://github.com/organizations/tinacms/settings/apps/release-bot-allow-prs-and-push
+          app-id: ${{ secrets.BOT_APP_ID }}
+          private-key: ${{ secrets.BOT_APP_SECRET }}
 
-      - name: Publish tagged PR
-        if: >
-          matrix.os == 'ubuntu-latest' &&
-          github.event_name == 'pull_request' &&
-          contains(github.event.pull_request.labels.*.name, 'tagged')
-        continue-on-error: true
-        run: |
-          echo running on branch ${BRANCH_NAME}
-          pnpm version:snapshot
-          pnpm publish -r --tag ${BRANCH_NAME} --no-git-checks --access public
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ steps.generate-token.outputs.token || secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: package.json
+          run_install: false
+
+      - name: Setup Node.js environment
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: "pnpm"
+          registry-url: https://registry.npmjs.org
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Build
+        run: pnpm build
+
+      - name: Create Release Pull Request
+        id: changesets
+        uses: changesets/action@v1
+        with:
+          version: pnpm run version
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
+          GITHUB_TOKEN: ${{ steps.generate-token.outputs.token || secrets.GITHUB_TOKEN  }}
+
+      - name: Set snapshot version
+        if: steps.changesets.outputs.hasChangesets == 'true'
+        run: |
+          timestamp=$(date +'%Y%m%d%H%M%S')
+          jq --arg version "0.0.0-$timestamp" '.version = $version' package.json > package.tmp.json
+          mv package.tmp.json package.json
+
+      - uses: JS-DevTools/npm-publish@v3
+        name: Publish to NPM
+        with:
+          access: public
+          tag: ${{ steps.changesets.outputs.hasChangesets == 'true' && 'beta' || 'latest' }}
+          token: ${{ secrets.NPM_AUTH_TOKEN }}
+
+  publish-pr:
+    name: Publish PR preview
+    needs: build
+    if: >
+      github.event_name == 'pull_request' &&
+      contains(github.event.pull_request.labels.*.name, 'tagged')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: package.json
+          run_install: false
+
+      - name: Setup Node.js environment
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: "pnpm"
+          registry-url: https://registry.npmjs.org
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Build
+        run: pnpm build
+
+      - name: Set snapshot version
+        run: |
+          timestamp=$(date +'%Y%m%d%H%M%S')
+          jq --arg version "0.0.0-$timestamp" '.version = $version' package.json > package.tmp.json
+          mv package.tmp.json package.json
+
+      - uses: JS-DevTools/npm-publish@v3
+        name: Publish to NPM
+        with:
+          access: public
+          tag: ${{ github.head_ref || github.ref_name }}
+          token: ${{ secrets.NPM_AUTH_TOKEN }}
