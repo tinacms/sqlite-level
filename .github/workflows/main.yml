@@ -103,7 +103,7 @@ jobs:
         if: steps.changesets.conclusion == 'skipped'
         run: |
           pnpm version:snapshot
-          pnpm run publish:beta
+          pnpm publish -r --tag beta --no-git-checks --access public
         env:
           GITHUB_TOKEN: ${{ steps.generate-token.outputs.token || secrets.GITHUB_TOKEN }}
           NPM_AUTH_TOKEN: ${{ secrets.NPM_AUTH_TOKEN }}
@@ -111,7 +111,7 @@ jobs:
       - name: Publish
         if: steps.changesets.conclusion == 'success' && steps.changesets.outputs.hasChangesets == 'false'
         run: |
-          pnpm run publish
+          pnpm publish -r --no-git-checks --access public
           pnpm push-tags
         env:
           GITHUB_TOKEN: ${{ steps.generate-token.outputs.token || secrets.GITHUB_TOKEN }}
