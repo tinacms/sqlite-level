@@ -12,8 +12,7 @@
  */
 
 import { SqliteLevel } from "./index";
-
-const ModuleError = require("module-error");
+import ModuleError from "module-error";
 
 const keyNotFoundError = (key: string) =>
   new ModuleError(`Key ${key} was not found`, {
