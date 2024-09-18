@@ -85,11 +85,13 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ steps.generate-token.outputs.token || secrets.GITHUB_TOKEN  }}
 
-      - name: Publish beta
+      - name: Set snapshot version
         if: steps.changesets.outputs.hasChangesets == 'true'
         run: |
-          pnpm exec changeset version --snapshot
-
+          timestamp=$(date +'%Y%m%d%H%M%S')
+          jq --arg version "0.0.0-$timestamp" '.version = $version' package.json > package.tmp.json
+          mv package.tmp.json package.json
+          
       - uses: JS-DevTools/npm-publish@v3
         name: Publish to NPM
         with:
@@ -126,9 +128,11 @@ jobs:
       - name: Build
         run: pnpm build
 
-      - name: Publish tagged PR
+      - name: Set snapshot version
         run: |
-          pnpm exec changeset version --snapshot
+          timestamp=$(date +'%Y%m%d%H%M%S')
+          jq --arg version "0.0.0-$timestamp" '.version = $version' package.json > package.tmp.json
+          mv package.tmp.json package.json
 
       - uses: JS-DevTools/npm-publish@v3
         name: Publish to NPM
