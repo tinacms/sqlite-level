@@ -245,58 +245,6 @@ export class SqliteLevel<
     stmt.run(key.toString());
   }
 
-  // async _batch(
-  //   batch: BatchOperation[],
-  //   options: any,
-  //   callback: (error?: Error) => void
-  // ): Promise<void> {
-  //   if (this.readOnly) {
-  //     return this.nextTick(
-  //       callback,
-  //       new ModuleError("not authorized to write to branch", {
-  //         code: "LEVEL_READ_ONLY",
-  //       })
-  //     );
-  //   }
-
-  //   let batches: string[] = [];
-  //   let curBatch: string[] = [];
-  //   let curType: string | undefined = undefined;
-  //   for (const op of batch) {
-  //     if (curType === undefined) {
-  //       curType = op.type;
-  //     } else if (curType !== op.type) {
-  //       if (curType === "put") {
-  //         batches.push(
-  //           `INSERT INTO kv (key, value) VALUES ${curBatch.join(",")}`
-  //         );
-  //       } else if (curType === "del") {
-  //         batches.push(`DELETE FROM kv WHERE key IN (${curBatch.join(",")})`);
-  //       }
-  //       curBatch = [];
-  //       curType = op.type;
-  //     }
-  //     if (op.type === "put") {
-  //       curBatch.push(`('${op.key.toString()}', '${op.value.toString()}')`);
-  //     } else if (op.type === "del") {
-  //       curBatch.push(`'${op.key.toString()}'`);
-  //     }
-  //   }
-  //   if (curBatch.length > 0) {
-  //     if (curType === "put") {
-  //       batches.push(
-  //         `INSERT INTO kv (key, value) VALUES ${curBatch.join(",")}`
-  //       );
-  //     } else if (curType === "del") {
-  //       batches.push(`DELETE FROM kv WHERE key IN (${curBatch.join(",")})`);
-  //     }
-  //   }
-  //   for (const batch of batches) {
-  //     this.db.exec(batch);
-  //   }
-  //   this.nextTick(callback);
-  // }
-
   async _batch(batch: BatchOperation[], options: any): Promise<void> {
     if (this.readOnly) {
       throw new ModuleError("not authorized to write to branch", {
