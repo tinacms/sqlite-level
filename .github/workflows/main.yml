@@ -5,7 +5,7 @@ on:
     branches:
       - main
   pull_request:
-    types: [opened, synchronize, reopened]
+    types: [opened, synchronize, reopened, labeled]
 
 jobs:
   build:
@@ -26,6 +26,7 @@ jobs:
       - uses: pnpm/action-setup@v4
         with:
           package_json_file: package.json
+          run_install: false
 
       - name: Setup Node.js environment
         uses: actions/setup-node@v4
@@ -66,6 +67,7 @@ jobs:
       - uses: pnpm/action-setup@v4
         with:
           package_json_file: package.json
+          run_install: false
 
       - name: Setup Node.js environment
         uses: actions/setup-node@v4
@@ -98,6 +100,12 @@ jobs:
       - uses: pnpm/action-setup@v4
         with:
           package_json_file: package.json
+          run_install: false
+
+      - name: Set publishing config
+        run: pnpm config set '//registry.npmjs.org/:_authToken' "${NODE_AUTH_TOKEN}"
+        env:
+          NODE_AUTH_TOKEN: ${{secrets.NPM_AUTH_TOKEN}}
 
       - name: Setup Node.js environment
         uses: actions/setup-node@v4
@@ -111,28 +119,16 @@ jobs:
       - name: Build
         run: pnpm build
 
-      - name: Set NPMRC
-        run: echo "//registry.npmjs.org/:_authToken=${NPM_AUTH_TOKEN}" > .npmrc
-        env:
-          NPM_AUTH_TOKEN: ${{ secrets.NPM_AUTH_TOKEN }}
-
       - name: Publish beta
         if: needs.create-pr.outputs.hasChangesets == 'true'
         run: |
           pnpm exec changeset version --snapshot
           pnpm publish -r --tag beta --no-git-checks --access public
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          NPM_AUTH_TOKEN: ${{ secrets.NPM_AUTH_TOKEN }}
 
       - name: Publish release
         if: needs.create-pr.outputs.hasChangesets == 'false'
         run: |
           pnpm publish -r --no-git-checks --access public
-          pnpm push-tags
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          NPM_AUTH_TOKEN: ${{ secrets.NPM_AUTH_TOKEN }}
         
   publish-pr:
     name: Publish PR preview
@@ -148,6 +144,12 @@ jobs:
       - uses: pnpm/action-setup@v4
         with:
           package_json_file: package.json
+          run_install: false
+
+      - name: Set publishing config
+        run: pnpm config set '//registry.npmjs.org/:_authToken' "${NODE_AUTH_TOKEN}"
+        env:
+          NODE_AUTH_TOKEN: ${{secrets.NPM_AUTH_TOKEN}}
 
       - name: Setup Node.js environment
         uses: actions/setup-node@v4
@@ -161,17 +163,10 @@ jobs:
       - name: Build
         run: pnpm build
 
-      - name: Set NPMRC
-        run: echo "//registry.npmjs.org/:_authToken=${NPM_AUTH_TOKEN}" > .npmrc
-        env:
-          NPM_AUTH_TOKEN: ${{ secrets.NPM_AUTH_TOKEN }}      
-
       - name: Publish tagged PR
         run: |
           echo running on branch ${BRANCH_NAME}
           pnpm exec changeset version --snapshot
           pnpm publish -r --tag ${BRANCH_NAME} --no-git-checks --access public
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          NPM_AUTH_TOKEN: ${{ secrets.NPM_AUTH_TOKEN }}
           BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
