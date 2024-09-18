@@ -43,13 +43,11 @@ jobs:
       - name: Test
         run: pnpm test
   
-  create-pr:
-    name: Create PR
+  publish:
+    name: Publish to NPM or Create Version PR
     needs: build
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
-    outputs:
-      hasChangesets: ${{ steps.check-changesets.outputs.hasChangesets }}
     steps:
       - name: Generate a token
         uses: actions/create-github-app-token@v1
@@ -86,49 +84,16 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ steps.generate-token.outputs.token || secrets.GITHUB_TOKEN  }}
 
-      - run: |
-            echo "hasChangesets=$(if [ -d .changeset ]; then echo 'true'; else echo 'false'; fi)" >> $GITHUB_OUTPUT
-        id: check-changesets
-  
-  publish:
-    name: Publish to NPM
-    needs: create-pr
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: pnpm/action-setup@v4
-        with:
-          package_json_file: package.json
-          run_install: false
-
-      - name: Set publishing config
-        run: pnpm config set '//registry.npmjs.org/:_authToken' "${NODE_AUTH_TOKEN}"
-        env:
-          NODE_AUTH_TOKEN: ${{secrets.NPM_AUTH_TOKEN}}
-
-      - name: Setup Node.js environment
-        uses: actions/setup-node@v4
-        with:
-          node-version-file: .nvmrc
-          cache: "pnpm"
-
-      - name: Install dependencies
-        run: pnpm install
-
-      - name: Build
-        run: pnpm build
-
-      - name: Publish beta
-        if: needs.create-pr.outputs.hasChangesets == 'true'
+      - name: Update version number
+        if: steps.changesets.outputs.hasChangesets == 'true'
         run: |
           pnpm exec changeset version --snapshot
-          pnpm publish -r --tag beta --no-git-checks --access public
 
-      - name: Publish release
-        if: needs.create-pr.outputs.hasChangesets == 'false'
-        run: |
-          pnpm publish -r --no-git-checks --access public
+      - uses: JS-DevTools/npm-publish@v3
+        with:
+          access: public
+          tag: ${{ steps.changesets.outputs.hasChangesets == 'true' && 'beta' || 'latest' }}
+          token: ${{ secrets.NPM_AUTH_TOKEN }}
         
   publish-pr:
     name: Publish PR preview
@@ -146,11 +111,6 @@ jobs:
           package_json_file: package.json
           run_install: false
 
-      - name: Set publishing config
-        run: pnpm config set '//registry.npmjs.org/:_authToken' "${NODE_AUTH_TOKEN}"
-        env:
-          NODE_AUTH_TOKEN: ${{secrets.NPM_AUTH_TOKEN}}
-
       - name: Setup Node.js environment
         uses: actions/setup-node@v4
         with:
@@ -163,10 +123,12 @@ jobs:
       - name: Build
         run: pnpm build
 
-      - name: Publish tagged PR
+      - name: Update version number
         run: |
-          echo running on branch ${BRANCH_NAME}
           pnpm exec changeset version --snapshot
-          pnpm publish -r --tag ${BRANCH_NAME} --no-git-checks --access public
-        env:
-          BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
+
+      - uses: JS-DevTools/npm-publish@v3
+        with:
+          access: public
+          tag: ${{ github.head_ref || github.ref_name }}
+          token: ${{ secrets.NPM_AUTH_TOKEN }}
