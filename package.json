@@ -3,8 +3,15 @@
   "description": "sqlite backed abstract-level database for Node.js",
   "version": "1.1.0",
   "main": "dist/index.js",
+  "module": "dist/index.mjs",
   "types": "dist/index.d.ts",
   "license": "Apache-2.0",
+  "exports": {
+    ".": {
+      "require": "./dist/index.js",
+      "import": "./dist/index.mjs"
+    }
+  },
   "keywords": [
     "level",
     "leveldb",
@@ -34,7 +41,10 @@
     "test": "jest --coverage",
     "types": "tsc",
     "docs": "npx typedoc",
-    "version": "pnpm exec changeset version"
+    "version": "pnpm exec changeset version",
+    "version:snapshot": "pnpm exec changeset version --snapshot",
+    "publish": "npm publish -r --no-git-checks --access public",
+    "publish:beta": "npm publish -r --tag beta --no-git-checks --access public"
   },
   "dependencies": {
     "abstract-level": "^2.0.0",
