@@ -3,8 +3,15 @@
   "description": "sqlite backed abstract-level database for Node.js",
   "version": "1.2.0",
   "main": "dist/index.js",
+  "module": "dist/index.mjs",
   "types": "dist/index.d.ts",
   "license": "Apache-2.0",
+  "exports": {
+    ".": {
+      "require": "./dist/index.js",
+      "import": "./dist/index.mjs"
+    }
+  },
   "keywords": [
     "level",
     "leveldb",
@@ -34,18 +41,21 @@
     "test": "jest --coverage",
     "types": "tsc",
     "docs": "npx typedoc",
-    "version": "pnpm exec changeset version"
+    "version": "pnpm exec changeset version",
+    "version:snapshot": "pnpm exec changeset version --snapshot",
+    "publish": "npm publish -r --no-git-checks --access public",
+    "publish:beta": "npm publish -r --tag beta --no-git-checks --access public"
   },
   "dependencies": {
-    "module-error": "^1.0.2",
-    "abstract-level": "^1.0.0",
-    "better-sqlite3": "^11.3.0"
+    "abstract-level": "^2.0.0",
+    "better-sqlite3": "^11.3.0",
+    "module-error": "^1.0.2"
   },
   "devDependencies": {
+    "@changesets/cli": "2.27.8",
     "@tinacms/scripts": "^1.2.1",
     "@types/better-sqlite3": "^7.6.11",
     "@types/jest": "^ 29.5.13",
-    "@changesets/cli": "2.27.8",
     "jest": "^29.7.0",
     "jest-environment-node": "^29.7.0",
     "ts-jest": "^29.2.5",
