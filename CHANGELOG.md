@@ -1,5 +1,11 @@
 # sqlite-level
 
+## 1.2.0
+
+### Minor Changes
+
+- 1d53318: Upgrade dependendices (especially sqlite) to latest version
+
 ## 1.0.1
 
 ### Patch Changes
