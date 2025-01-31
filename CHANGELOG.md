@@ -1,5 +1,11 @@
 # sqlite-level
 
+## 1.2.1
+
+### Patch Changes
+
+- 3e85afc: ⬆️ chore: update dependencies and devDependencies in package.json
+
 ## 1.2.0
 
 ### Minor Changes
