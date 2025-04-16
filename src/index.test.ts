@@ -51,10 +51,12 @@ describe('sqlite-level', () => {
       {type: 'del', key: 'key1'},
       {type: 'put', key: 'key2', value: 'value2'},
       {type: 'put', key: 'key3', value: 'value3'},
+      {type: 'put', key: "'key4'", value: "Mark's"},
     ])
     await expect(level.get('key1')).rejects.toThrow(keyNotFoundError('key1'))
     expect(await level.get('key2')).toEqual('value2')
     expect(await level.get('key3')).toEqual('value3')
+    expect(await level.get("'key4'")).toEqual("Mark's")
   })
 
   it('iterates over key value pairs', async () => {
