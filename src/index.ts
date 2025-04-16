@@ -284,10 +284,12 @@ export class SqliteLevel<KDefault = string, VDefault = string> extends AbstractL
         curBatch = []
         curType = op.type
       }
+      const key = op.key.toString().replace(/'/g, "''");
       if (op.type === 'put') {
-        curBatch.push(`('${op.key.toString()}', '${op.value.toString()}')`)
+        const value = op.value.toString().replace(/'/g, "''");
+        curBatch.push(`('${key}', '${value}')`)
       } else if (op.type === 'del') {
-        curBatch.push(`'${op.key.toString()}'`)
+        curBatch.push(`'${key}'`)
       }
     }
     if (curBatch.length > 0) {
