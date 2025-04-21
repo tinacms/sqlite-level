@@ -89,4 +89,15 @@ describe('sqlite-level', () => {
     expect(await result.next()).toEqual('value2')
     expect(await result.next()).toBeUndefined()
   })
+
+  it('value update', async () => {
+    await level.put('fixed_key1', 'value1')
+    await level.batch([
+      {type: 'put', key: 'fixed_key1', value: 'value2'},
+      {type: 'put', key: 'fixed_key2', value: 'value3'},
+      {type: 'put', key: 'fixed_key2', value: 'value4'},
+    ])
+    expect(await level.get('fixed_key1')).toEqual('value2')
+    expect(await level.get('fixed_key2')).toEqual('value4')
+  })
 })

@@ -207,7 +207,7 @@ export class SqliteLevel<KDefault = string, VDefault = string> extends AbstractL
   }
 
   async _open(options: AbstractOpenOptions, callback: (error?: Error) => void) {
-    this.db.exec('CREATE TABLE IF NOT EXISTS kv (key TEXT, value TEXT)')
+    this.db.exec('CREATE TABLE IF NOT EXISTS kv (key TEXT UNIQUE, value TEXT)')
     this.nextTick(callback)
   }
 
@@ -240,7 +240,7 @@ export class SqliteLevel<KDefault = string, VDefault = string> extends AbstractL
         })
       )
     }
-    const stmt = this.db.prepare('INSERT INTO kv (key, value) VALUES (?, ?)')
+    const stmt = this.db.prepare('INSERT INTO kv (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value')
     stmt.run(key.toString(), value.toString())
     this.nextTick(callback)
   }
@@ -277,7 +277,7 @@ export class SqliteLevel<KDefault = string, VDefault = string> extends AbstractL
         curType = op.type
       } else if (curType !== op.type) {
         if (curType === 'put') {
-          batches.push(`INSERT INTO kv (key, value) VALUES ${curBatch.join(',')}`)
+          batches.push(`INSERT INTO kv (key, value) VALUES ${curBatch.join(',')} ON CONFLICT(key) DO UPDATE SET value=excluded.value`)
         } else if (curType === 'del') {
           batches.push(`DELETE FROM kv WHERE key IN (${curBatch.join(',')})`)
         }
@@ -292,7 +292,7 @@ export class SqliteLevel<KDefault = string, VDefault = string> extends AbstractL
     }
     if (curBatch.length > 0) {
       if (curType === 'put') {
-        batches.push(`INSERT INTO kv (key, value) VALUES ${curBatch.join(',')}`)
+        batches.push(`INSERT INTO kv (key, value) VALUES ${curBatch.join(',')} ON CONFLICT(key) DO UPDATE SET value=excluded.value`)
       } else if (curType === 'del') {
         batches.push(`DELETE FROM kv WHERE key IN (${curBatch.join(',')})`)
       }
