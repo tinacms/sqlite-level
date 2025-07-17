@@ -135,6 +135,13 @@ class SqliteIterator<KDefault, VDefault> extends AbstractIterator<
       return this.db.nextTick(callback, null, undefined, undefined)
     }
   }
+
+  async _close(callback: NextCallback<KDefault, VDefault>) {
+    if (this.iterator?.return) {
+      this.iterator.return()
+    }
+    return this.db.nextTick(callback)
+  }
 }
 class SqliteKeyIterator<KDefault, VDefault> extends AbstractKeyIterator<
   SqliteLevel<KDefault, VDefault>,

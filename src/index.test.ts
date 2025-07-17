@@ -89,4 +89,18 @@ describe('sqlite-level', () => {
     expect(await result.next()).toEqual('value2')
     expect(await result.next()).toBeUndefined()
   })
+
+  it('iterates break in loop', async () => {
+    await level.batch([
+      {type: 'put', key: 'key1', value: 'value1'},
+      {type: 'put', key: 'key2', value: 'value2'},
+      {type: 'put', key: 'key3', value: 'value3'},
+    ])
+    for await (const [key, value] of level.iterator()) {
+      if (key === 'key2') {
+        break
+      }
+    }
+    expect(await level.get("key3")).toEqual('value3')
+  })
 })
