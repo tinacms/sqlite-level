@@ -82,7 +82,7 @@ declare interface IteratorOptions<KDefault> {
 const queryFromOptions = (options: IteratorOptions<any>) => {
   let query = 'SELECT key, value FROM kv'
 
-  const params = []
+  const params: unknown[] = []
   if (options.gt) {
     query += ` WHERE key > ?`
     params.push(options.gt)
@@ -106,7 +106,8 @@ const queryFromOptions = (options: IteratorOptions<any>) => {
   }
 
   if (options.limit) {
-    query += ` LIMIT ${options.limit}`
+    query += ` LIMIT ?`
+    params.push(options.limit)
   }
 
   return { query, params }
@@ -117,15 +118,13 @@ class SqliteIterator<KDefault, VDefault> extends AbstractIterator<
   KDefault,
   VDefault
 > {
-  private client: any
   private iterator: IterableIterator<any>
 
-  constructor(db: SqliteLevel<KDefault, VDefault>, options: IteratorOptions<KDefault>, client: any) {
+  constructor(db: SqliteLevel<KDefault, VDefault>, options: IteratorOptions<KDefault>, client: Database.Database) {
     super(db, options)
-    this.client = client
 
     const { query, params } = queryFromOptions(options)
-    const stmt = this.client.prepare(query)
+    const stmt = client.prepare(query)
     this.iterator = stmt.iterate(params)
   }
 
@@ -147,15 +146,13 @@ class SqliteKeyIterator<KDefault, VDefault> extends AbstractKeyIterator<
   SqliteLevel<KDefault, VDefault>,
   KDefault
 > {
-  private client: any
   private iterator: IterableIterator<any>
 
-  constructor(db: SqliteLevel<KDefault, VDefault>, options: IteratorOptions<KDefault>, client: any) {
+  constructor(db: SqliteLevel<KDefault, VDefault>, options: IteratorOptions<KDefault>, client: Database.Database) {
     super(db, options)
-    this.client = client
 
     const { query, params } = queryFromOptions(options)
-    const stmt = this.client.prepare(query)
+    const stmt = client.prepare(query)
     this.iterator = stmt.iterate(params)
   }
 
@@ -178,15 +175,13 @@ class SqliteValueIterator<KDefault, VDefault> extends AbstractValueIterator<
   KDefault,
   VDefault
 > {
-  private client: any
   private iterator: IterableIterator<any>
 
-  constructor(db: SqliteLevel<KDefault, VDefault>, options: IteratorOptions<KDefault>, client: any) {
+  constructor(db: SqliteLevel<KDefault, VDefault>, options: IteratorOptions<KDefault>, client: Database.Database) {
     super(db, options)
-    this.client = client
 
     const { query, params } = queryFromOptions(options)
-    const stmt = this.client.prepare(query)
+    const stmt = client.prepare(query)
     this.iterator = stmt.iterate(params)
   }
 
@@ -286,40 +281,22 @@ export class SqliteLevel<KDefault = string, VDefault = string> extends AbstractL
       )
     }
 
-    let batches: string[] = []
-    let curBatch: string[] = []
-    let curType: string | undefined = undefined
-    for (const op of batch) {
-      if (curType === undefined) {
-        curType = op.type
-      } else if (curType !== op.type) {
-        if (curType === 'put') {
-          batches.push(`INSERT INTO kv (key, value) VALUES ${curBatch.join(',')} ON CONFLICT(key) DO UPDATE SET value=excluded.value`)
-        } else if (curType === 'del') {
-          batches.push(`DELETE FROM kv WHERE key IN (${curBatch.join(',')})`)
+    const putStmt = this.db.prepare(
+      'INSERT INTO kv (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value'
+    )
+    const delStmt = this.db.prepare('DELETE FROM kv WHERE key = ?')
+
+    const runBatch = this.db.transaction((ops: BatchOperation[]) => {
+      for (const op of ops) {
+        if (op.type === 'put') {
+          putStmt.run(op.key.toString(), op.value.toString())
+        } else if (op.type === 'del') {
+          delStmt.run(op.key.toString())
         }
-        curBatch = []
-        curType = op.type
       }
-      if (op.type === 'put') {
-        const key = op.key.toString().replace(/'/g, "''")
-        const value = op.value.toString().replace(/'/g, "''")
-        curBatch.push(`('${key}', '${value}')`)
-      } else if (op.type === 'del') {
-        const key = op.key.toString().replace(/'/g, "''")
-        curBatch.push(`'${key}'`)
-      }
-    }
-    if (curBatch.length > 0) {
-      if (curType === 'put') {
-        batches.push(`INSERT INTO kv (key, value) VALUES ${curBatch.join(',')} ON CONFLICT(key) DO UPDATE SET value=excluded.value`)
-      } else if (curType === 'del') {
-        batches.push(`DELETE FROM kv WHERE key IN (${curBatch.join(',')})`)
-      }
-    }
-    for (const batch of batches) {
-      this.db.exec(batch)
-    }
+    })
+
+    runBatch(batch)
     this.nextTick(callback)
   }
 
