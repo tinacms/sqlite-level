@@ -18,9 +18,11 @@ import {
   AbstractOpenOptions,
   AbstractValueIterator,
 } from 'abstract-level'
-import { NextCallback } from 'abstract-level/types/abstract-iterator'
 import ModuleError from 'module-error'
 import Database from 'better-sqlite3'
+
+type NextCallback<K, V> =
+  (err: Error | undefined | null, key?: K | undefined, value?: V | undefined) => void
 
 export type SqliteLevelOptions<K, V> = {
   filename: string
@@ -135,6 +137,11 @@ class SqliteIterator<KDefault, VDefault> extends AbstractIterator<
       return this.db.nextTick(callback, null, undefined, undefined)
     }
   }
+
+  async _close(callback: (error?: Error) => void) {
+    this.iterator.return?.()
+    this.db.nextTick(callback)
+  }
 }
 class SqliteKeyIterator<KDefault, VDefault> extends AbstractKeyIterator<
   SqliteLevel<KDefault, VDefault>,
@@ -159,6 +166,11 @@ class SqliteKeyIterator<KDefault, VDefault> extends AbstractKeyIterator<
     } else {
       return this.db.nextTick(callback, null, undefined)
     }
+  }
+
+  async _close(callback: (error?: Error) => void) {
+    this.iterator.return?.()
+    this.db.nextTick(callback)
   }
 }
 class SqliteValueIterator<KDefault, VDefault> extends AbstractValueIterator<
@@ -186,6 +198,11 @@ class SqliteValueIterator<KDefault, VDefault> extends AbstractValueIterator<
       return this.db.nextTick(callback, null, undefined)
     }
   }
+
+  async _close(callback: (error?: Error) => void) {
+    this.iterator.return?.()
+    this.db.nextTick(callback)
+  }
 }
 
 export class SqliteLevel<KDefault = string, VDefault = string> extends AbstractLevel<Buffer | Uint8Array | string, KDefault, VDefault> {
@@ -207,7 +224,7 @@ export class SqliteLevel<KDefault = string, VDefault = string> extends AbstractL
   }
 
   async _open(options: AbstractOpenOptions, callback: (error?: Error) => void) {
-    this.db.exec('CREATE TABLE IF NOT EXISTS kv (key TEXT, value TEXT)')
+    this.db.exec('CREATE TABLE IF NOT EXISTS kv (key TEXT UNIQUE, value TEXT)')
     this.nextTick(callback)
   }
 
@@ -240,7 +257,7 @@ export class SqliteLevel<KDefault = string, VDefault = string> extends AbstractL
         })
       )
     }
-    const stmt = this.db.prepare('INSERT INTO kv (key, value) VALUES (?, ?)')
+    const stmt = this.db.prepare('INSERT INTO kv (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value')
     stmt.run(key.toString(), value.toString())
     this.nextTick(callback)
   }
@@ -277,7 +294,7 @@ export class SqliteLevel<KDefault = string, VDefault = string> extends AbstractL
         curType = op.type
       } else if (curType !== op.type) {
         if (curType === 'put') {
-          batches.push(`INSERT INTO kv (key, value) VALUES ${curBatch.join(',')}`)
+          batches.push(`INSERT INTO kv (key, value) VALUES ${curBatch.join(',')} ON CONFLICT(key) DO UPDATE SET value=excluded.value`)
         } else if (curType === 'del') {
           batches.push(`DELETE FROM kv WHERE key IN (${curBatch.join(',')})`)
         }
@@ -285,14 +302,17 @@ export class SqliteLevel<KDefault = string, VDefault = string> extends AbstractL
         curType = op.type
       }
       if (op.type === 'put') {
-        curBatch.push(`('${op.key.toString()}', '${op.value.toString()}')`)
+        const key = op.key.toString().replace(/'/g, "''")
+        const value = op.value.toString().replace(/'/g, "''")
+        curBatch.push(`('${key}', '${value}')`)
       } else if (op.type === 'del') {
-        curBatch.push(`'${op.key.toString()}'`)
+        const key = op.key.toString().replace(/'/g, "''")
+        curBatch.push(`'${key}'`)
       }
     }
     if (curBatch.length > 0) {
       if (curType === 'put') {
-        batches.push(`INSERT INTO kv (key, value) VALUES ${curBatch.join(',')}`)
+        batches.push(`INSERT INTO kv (key, value) VALUES ${curBatch.join(',')} ON CONFLICT(key) DO UPDATE SET value=excluded.value`)
       } else if (curType === 'del') {
         batches.push(`DELETE FROM kv WHERE key IN (${curBatch.join(',')})`)
       }
@@ -304,7 +324,8 @@ export class SqliteLevel<KDefault = string, VDefault = string> extends AbstractL
   }
 
   async _clear(options: any, callback: (error?: Error) => void): Promise<void> {
-    this.db.exec(`DELETE FROM kv WHERE key like '${options.gte}%'`)
+    const stmt = this.db.prepare('DELETE FROM kv WHERE key LIKE ? || \'%\'')
+    stmt.run(options.gte)
     this.nextTick(callback)
   }
 
