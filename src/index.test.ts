@@ -14,9 +14,9 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { SqliteLevel } from './index.js'
 import ModuleError from 'module-error'
-import * as fs from 'fs'
-import * as path from 'path'
-import * as os from 'os'
+import * as fs from 'node:fs'
+import * as path from 'node:path'
+import * as os from 'node:os'
 
 const keyNotFoundError = (key: string) => new ModuleError(`Key ${key} was not found`, {
   code: 'LEVEL_NOT_FOUND',
