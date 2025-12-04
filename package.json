@@ -38,6 +38,7 @@
     "build": "tsc",
     "test": "vitest run",
     "test:watch": "vitest",
+    "types": "tsc --noEmit",
     "docs": "npx typedoc",
     "version": "pnpm exec changeset version"
   },
