@@ -208,6 +208,14 @@ describe('sqlite-level', () => {
       }
       expect(items).toEqual([['e', '5'], ['d', '4']])
     })
+
+    it('limit 0 returns nothing', async () => {
+      const items: [string, string][] = []
+      for await (const item of level.iterator({ limit: 0 })) {
+        items.push(item as [string, string])
+      }
+      expect(items).toEqual([])
+    })
   })
 
   describe('read-only mode', () => {
@@ -262,29 +270,86 @@ describe('sqlite-level', () => {
         new ModuleError('not authorized to write to branch', { code: 'LEVEL_READ_ONLY' })
       )
     })
+
+    it('throws error on clear in read-only mode', async () => {
+      await expect(readOnlyLevel.clear()).rejects.toThrow(
+        new ModuleError('not authorized to write to branch', { code: 'LEVEL_READ_ONLY' })
+      )
+    })
   })
 
   describe('clear with options', () => {
     beforeEach(async () => {
       await level.batch([
-        {type: 'put', key: 'prefix1:a', value: '1'},
-        {type: 'put', key: 'prefix1:b', value: '2'},
-        {type: 'put', key: 'prefix2:a', value: '3'},
-        {type: 'put', key: 'prefix2:b', value: '4'},
-        {type: 'put', key: 'other:a', value: '5'},
+        {type: 'put', key: 'a', value: '1'},
+        {type: 'put', key: 'b', value: '2'},
+        {type: 'put', key: 'c', value: '3'},
+        {type: 'put', key: 'd', value: '4'},
+        {type: 'put', key: 'e', value: '5'},
       ])
     })
 
-    it('clears keys matching gte prefix pattern', async () => {
-      // Note: _clear uses LIKE with prefix pattern, so gte: 'prefix1' 
-      // will clear keys starting with 'prefix1'
-      await level.clear({ gte: 'prefix1' })
-      await expect(level.get('prefix1:a')).rejects.toThrow()
-      await expect(level.get('prefix1:b')).rejects.toThrow()
-      // prefix2 and other keys should still exist
-      expect(await level.get('prefix2:a')).toEqual('3')
-      expect(await level.get('prefix2:b')).toEqual('4')
-      expect(await level.get('other:a')).toEqual('5')
+    it('clears all keys when no options given', async () => {
+      await level.clear()
+      const items: [string, string][] = []
+      for await (const item of level.iterator()) {
+        items.push(item as [string, string])
+      }
+      expect(items).toEqual([])
+    })
+
+    it('clears keys with gte', async () => {
+      await level.clear({ gte: 'c' })
+      expect(await level.get('a')).toEqual('1')
+      expect(await level.get('b')).toEqual('2')
+      await expect(level.get('c')).rejects.toThrow()
+      await expect(level.get('d')).rejects.toThrow()
+      await expect(level.get('e')).rejects.toThrow()
+    })
+
+    it('clears keys with gt', async () => {
+      await level.clear({ gt: 'c' })
+      expect(await level.get('a')).toEqual('1')
+      expect(await level.get('b')).toEqual('2')
+      expect(await level.get('c')).toEqual('3')
+      await expect(level.get('d')).rejects.toThrow()
+      await expect(level.get('e')).rejects.toThrow()
+    })
+
+    it('clears keys with lte', async () => {
+      await level.clear({ lte: 'c' })
+      await expect(level.get('a')).rejects.toThrow()
+      await expect(level.get('b')).rejects.toThrow()
+      await expect(level.get('c')).rejects.toThrow()
+      expect(await level.get('d')).toEqual('4')
+      expect(await level.get('e')).toEqual('5')
+    })
+
+    it('clears keys with lt', async () => {
+      await level.clear({ lt: 'c' })
+      await expect(level.get('a')).rejects.toThrow()
+      await expect(level.get('b')).rejects.toThrow()
+      expect(await level.get('c')).toEqual('3')
+      expect(await level.get('d')).toEqual('4')
+      expect(await level.get('e')).toEqual('5')
+    })
+
+    it('clears keys within a range (gte + lte)', async () => {
+      await level.clear({ gte: 'b', lte: 'd' })
+      expect(await level.get('a')).toEqual('1')
+      await expect(level.get('b')).rejects.toThrow()
+      await expect(level.get('c')).rejects.toThrow()
+      await expect(level.get('d')).rejects.toThrow()
+      expect(await level.get('e')).toEqual('5')
+    })
+
+    it('clears keys within a range (gt + lt)', async () => {
+      await level.clear({ gt: 'a', lt: 'e' })
+      expect(await level.get('a')).toEqual('1')
+      await expect(level.get('b')).rejects.toThrow()
+      await expect(level.get('c')).rejects.toThrow()
+      await expect(level.get('d')).rejects.toThrow()
+      expect(await level.get('e')).toEqual('5')
     })
   })
 
@@ -489,6 +554,38 @@ describe('sqlite-level', () => {
       // Should still work after breaking from iterator
       expect(await level.get('key3')).toEqual('value3')
     })
+
+    it('allows database operations after breaking from key iterator loop', async () => {
+      await level.batch([
+        {type: 'put', key: 'key1', value: 'value1'},
+        {type: 'put', key: 'key2', value: 'value2'},
+        {type: 'put', key: 'key3', value: 'value3'},
+      ])
+
+      for await (const key of level.keys()) {
+        if (key === 'key2') {
+          break
+        }
+      }
+
+      expect(await level.get('key3')).toEqual('value3')
+    })
+
+    it('allows database operations after breaking from value iterator loop', async () => {
+      await level.batch([
+        {type: 'put', key: 'key1', value: 'value1'},
+        {type: 'put', key: 'key2', value: 'value2'},
+        {type: 'put', key: 'key3', value: 'value3'},
+      ])
+
+      for await (const value of level.values()) {
+        if (value === 'value2') {
+          break
+        }
+      }
+
+      expect(await level.get('key3')).toEqual('value3')
+    })
   })
 
   describe('SQL injection prevention', () => {
@@ -540,14 +637,29 @@ describe('sqlite-level', () => {
     it('handles SQL injection attempts in clear', async () => {
       await level.put('prefix:a', 'value1')
       await level.put('other:b', 'value2')
-      
-      // Attempt SQL injection via clear options
+
+      // Attempt SQL injection via clear options — the string is treated as
+      // a literal range bound, not SQL. Since ' sorts before lowercase letters,
+      // gte matches all keys and they are deleted — proving it ran as a
+      // parameterized range query, not as injected SQL.
       const maliciousPrefix = "' OR '1'='1"
       await level.clear({ gte: maliciousPrefix })
-      
-      // Both keys should still exist since the malicious prefix doesn't match
-      expect(await level.get('prefix:a')).toEqual('value1')
-      expect(await level.get('other:b')).toEqual('value2')
+
+      await expect(level.get('prefix:a')).rejects.toThrow()
+      await expect(level.get('other:b')).rejects.toThrow()
+    })
+
+    it('clear with injection does not affect keys outside range', async () => {
+      await level.put('aaa', 'value1')
+      await level.put('mmm', 'value2')
+
+      // The malicious string sorts after 'mmm', so only it would be in range
+      const malicious = "zzz'; DROP TABLE kv; --"
+      await level.clear({ gte: malicious })
+
+      // Both keys sort before the malicious string, so they survive
+      expect(await level.get('aaa')).toEqual('value1')
+      expect(await level.get('mmm')).toEqual('value2')
     })
 
     it('handles SQL injection attempts in iterator options', async () => {
