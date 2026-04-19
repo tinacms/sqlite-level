@@ -1,7 +1,7 @@
 {
   "name": "sqlite-level",
   "description": "sqlite backed abstract-level database for Node.js",
-  "version": "1.2.1",
+  "version": "1.2.2",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "license": "Apache-2.0",
@@ -38,7 +38,7 @@
   },
   "dependencies": {
     "abstract-level": "^1.0.4",
-    "better-sqlite3": "^11.8.1",
+    "better-sqlite3": "^12.9.0",
     "module-error": "^1.0.2"
   },
   "devDependencies": {
