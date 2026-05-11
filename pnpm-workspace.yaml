@@ -1,4 +1,7 @@
 # pnpm 11 disables postinstall scripts of dependencies by default (strictDepBuilds).
-# better-sqlite3 needs its native build step to run, so allow it explicitly.
+# Allow only the deps that actually need their build step.
+#   - better-sqlite3: native compilation via prebuild-install / node-gyp
+#   - esbuild: downloads the platform binary (transitive via vitest)
 allowBuilds:
   better-sqlite3: true
+  esbuild: true
