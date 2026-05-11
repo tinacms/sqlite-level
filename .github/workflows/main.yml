@@ -269,6 +269,14 @@ jobs:
             // Generate install commands using actual versions
             const installCommands = packages.map(pkg => `pnpm add ${pkg.name}@${pkg.version}`).join('\n');
 
+            // Generate npmx.dev links: one to the package page, one to this exact version
+            let linksSection = '\n**View on npm:**\n';
+            for (const pkg of packages) {
+              const pkgUrl = `https://npmx.dev/package/${pkg.name}`;
+              const versionUrl = `${pkgUrl}/v/${pkg.version}`;
+              linksSection += `- [\`${pkg.name}\`](${pkgUrl}) · [\`${pkg.version}\`](${versionUrl})\n`;
+            }
+
             const comment = `## 📦 Tagged Release Published
 
             Your tagged PR has been published! You can install the packages using their version tags:
@@ -278,6 +286,7 @@ jobs:
             \`\`\`
 
             ${packagesSection}
+            ${linksSection}
 
             **Commit:** \`${context.sha}\`
             `;
