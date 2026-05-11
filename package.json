@@ -31,8 +31,7 @@
     "dist/index.js",
     "dist/index.d.ts",
     "CHANGELOG.md",
-    "README.md",
-    "build"
+    "README.md"
   ],
   "scripts": {
     "build": "tsc",
@@ -57,5 +56,5 @@
   "publishConfig": {
     "registry": "https://registry.npmjs.org"
   },
-  "packageManager": "pnpm@9.15.4"
+  "packageManager": "pnpm@11.0.9"
 }
