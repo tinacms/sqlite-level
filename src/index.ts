@@ -18,9 +18,11 @@ import {
   AbstractOpenOptions,
   AbstractValueIterator,
 } from 'abstract-level'
-import { NextCallback } from 'abstract-level/types/abstract-iterator'
 import ModuleError from 'module-error'
 import Database from 'better-sqlite3'
+
+type NextCallback<K, V> =
+  (err: Error | undefined | null, key?: K | undefined, value?: V | undefined) => void
 
 export type SqliteLevelOptions<K, V> = {
   filename: string
@@ -80,21 +82,27 @@ declare interface IteratorOptions<KDefault> {
 const queryFromOptions = (options: IteratorOptions<any>) => {
   let query = 'SELECT key, value FROM kv'
 
-  const params = []
-  if (options.gt) {
-    query += ` WHERE key > ?`
+  const params: unknown[] = []
+  const conditions: string[] = []
+
+  if (options.gt != null) {
+    conditions.push('key > ?')
     params.push(options.gt)
-  } else if (options.gte) {
-    query += ` WHERE key >= ?`
+  } else if (options.gte != null) {
+    conditions.push('key >= ?')
     params.push(options.gte)
   }
 
-  if (options.lt) {
-    query += ` ${options.gt || options.gte ? 'AND' : 'WHERE'} key < ?`
+  if (options.lt != null) {
+    conditions.push('key < ?')
     params.push(options.lt)
-  } else if (options.lte) {
-    query += ` ${options.gt || options.gte ? 'AND' : 'WHERE'} key <= ?`
+  } else if (options.lte != null) {
+    conditions.push('key <= ?')
     params.push(options.lte)
+  }
+
+  if (conditions.length > 0) {
+    query += ` WHERE ${conditions.join(' AND ')}`
   }
 
   if (options.reverse) {
@@ -103,8 +111,9 @@ const queryFromOptions = (options: IteratorOptions<any>) => {
     query += ' ORDER BY key ASC'
   }
 
-  if (options.limit) {
-    query += ` LIMIT ${options.limit}`
+  if (options.limit != null && options.limit >= 0) {
+    query += ` LIMIT ?`
+    params.push(options.limit)
   }
 
   return { query, params }
@@ -115,16 +124,14 @@ class SqliteIterator<KDefault, VDefault> extends AbstractIterator<
   KDefault,
   VDefault
 > {
-  private client: any
   private iterator: IterableIterator<any>
 
-  constructor(db: SqliteLevel<KDefault, VDefault>, options: IteratorOptions<KDefault>, client: any) {
+  constructor(db: SqliteLevel<KDefault, VDefault>, options: IteratorOptions<KDefault>, client: Database.Database) {
     super(db, options)
-    this.client = client
 
     const { query, params } = queryFromOptions(options)
-    const stmt = this.client.prepare(query)
-    this.iterator = stmt.iterate(params)
+    const stmt = client.prepare(query)
+    this.iterator = stmt.iterate(...params)
   }
 
   async _next(callback: NextCallback<KDefault, VDefault>) {
@@ -135,21 +142,24 @@ class SqliteIterator<KDefault, VDefault> extends AbstractIterator<
       return this.db.nextTick(callback, null, undefined, undefined)
     }
   }
+
+  _close(callback: (error?: Error) => void) {
+    this.iterator.return?.()
+    this.db.nextTick(callback)
+  }
 }
 class SqliteKeyIterator<KDefault, VDefault> extends AbstractKeyIterator<
   SqliteLevel<KDefault, VDefault>,
   KDefault
 > {
-  private client: any
   private iterator: IterableIterator<any>
 
-  constructor(db: SqliteLevel<KDefault, VDefault>, options: IteratorOptions<KDefault>, client: any) {
+  constructor(db: SqliteLevel<KDefault, VDefault>, options: IteratorOptions<KDefault>, client: Database.Database) {
     super(db, options)
-    this.client = client
 
     const { query, params } = queryFromOptions(options)
-    const stmt = this.client.prepare(query)
-    this.iterator = stmt.iterate(params)
+    const stmt = client.prepare(query)
+    this.iterator = stmt.iterate(...params)
   }
 
   async _next(callback: NextCallback<KDefault, VDefault>) {
@@ -160,22 +170,25 @@ class SqliteKeyIterator<KDefault, VDefault> extends AbstractKeyIterator<
       return this.db.nextTick(callback, null, undefined)
     }
   }
+
+  _close(callback: (error?: Error) => void) {
+    this.iterator.return?.()
+    this.db.nextTick(callback)
+  }
 }
 class SqliteValueIterator<KDefault, VDefault> extends AbstractValueIterator<
   SqliteLevel<KDefault, VDefault>,
   KDefault,
   VDefault
 > {
-  private client: any
   private iterator: IterableIterator<any>
 
-  constructor(db: SqliteLevel<KDefault, VDefault>, options: IteratorOptions<KDefault>, client: any) {
+  constructor(db: SqliteLevel<KDefault, VDefault>, options: IteratorOptions<KDefault>, client: Database.Database) {
     super(db, options)
-    this.client = client
 
     const { query, params } = queryFromOptions(options)
-    const stmt = this.client.prepare(query)
-    this.iterator = stmt.iterate(params)
+    const stmt = client.prepare(query)
+    this.iterator = stmt.iterate(...params)
   }
 
   async _next(callback: NextCallback<KDefault, VDefault>) {
@@ -185,6 +198,11 @@ class SqliteValueIterator<KDefault, VDefault> extends AbstractValueIterator<
     } else {
       return this.db.nextTick(callback, null, undefined)
     }
+  }
+
+  _close(callback: (error?: Error) => void) {
+    this.iterator.return?.()
+    this.db.nextTick(callback)
   }
 }
 
@@ -207,7 +225,7 @@ export class SqliteLevel<KDefault = string, VDefault = string> extends AbstractL
   }
 
   async _open(options: AbstractOpenOptions, callback: (error?: Error) => void) {
-    this.db.exec('CREATE TABLE IF NOT EXISTS kv (key TEXT, value TEXT)')
+    this.db.exec('CREATE TABLE IF NOT EXISTS kv (key TEXT UNIQUE, value TEXT)')
     this.nextTick(callback)
   }
 
@@ -240,7 +258,7 @@ export class SqliteLevel<KDefault = string, VDefault = string> extends AbstractL
         })
       )
     }
-    const stmt = this.db.prepare('INSERT INTO kv (key, value) VALUES (?, ?)')
+    const stmt = this.db.prepare('INSERT INTO kv (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value')
     stmt.run(key.toString(), value.toString())
     this.nextTick(callback)
   }
@@ -269,42 +287,61 @@ export class SqliteLevel<KDefault = string, VDefault = string> extends AbstractL
       )
     }
 
-    let batches: string[] = []
-    let curBatch: string[] = []
-    let curType: string | undefined = undefined
-    for (const op of batch) {
-      if (curType === undefined) {
-        curType = op.type
-      } else if (curType !== op.type) {
-        if (curType === 'put') {
-          batches.push(`INSERT INTO kv (key, value) VALUES ${curBatch.join(',')}`)
-        } else if (curType === 'del') {
-          batches.push(`DELETE FROM kv WHERE key IN (${curBatch.join(',')})`)
+    const putStmt = this.db.prepare(
+      'INSERT INTO kv (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value'
+    )
+    const delStmt = this.db.prepare('DELETE FROM kv WHERE key = ?')
+
+    const runBatch = this.db.transaction((ops: BatchOperation[]) => {
+      for (const op of ops) {
+        if (op.type === 'put') {
+          putStmt.run(op.key.toString(), op.value.toString())
+        } else if (op.type === 'del') {
+          delStmt.run(op.key.toString())
         }
-        curBatch = []
-        curType = op.type
       }
-      if (op.type === 'put') {
-        curBatch.push(`('${op.key.toString()}', '${op.value.toString()}')`)
-      } else if (op.type === 'del') {
-        curBatch.push(`'${op.key.toString()}'`)
-      }
-    }
-    if (curBatch.length > 0) {
-      if (curType === 'put') {
-        batches.push(`INSERT INTO kv (key, value) VALUES ${curBatch.join(',')}`)
-      } else if (curType === 'del') {
-        batches.push(`DELETE FROM kv WHERE key IN (${curBatch.join(',')})`)
-      }
-    }
-    for (const batch of batches) {
-      this.db.exec(batch)
-    }
+    })
+
+    runBatch(batch)
     this.nextTick(callback)
   }
 
   async _clear(options: any, callback: (error?: Error) => void): Promise<void> {
-    this.db.exec(`DELETE FROM kv WHERE key like '${options.gte}%'`)
+    if (this.readOnly) {
+      return this.nextTick(
+        callback,
+        new ModuleError('not authorized to write to branch', {
+          code: 'LEVEL_READ_ONLY',
+        })
+      )
+    }
+
+    let query = 'DELETE FROM kv'
+    const params: unknown[] = []
+    const conditions: string[] = []
+
+    if (options.gt != null) {
+      conditions.push('key > ?')
+      params.push(options.gt)
+    } else if (options.gte != null) {
+      conditions.push('key >= ?')
+      params.push(options.gte)
+    }
+
+    if (options.lt != null) {
+      conditions.push('key < ?')
+      params.push(options.lt)
+    } else if (options.lte != null) {
+      conditions.push('key <= ?')
+      params.push(options.lte)
+    }
+
+    if (conditions.length > 0) {
+      query += ` WHERE ${conditions.join(' AND ')}`
+    }
+
+    const stmt = this.db.prepare(query)
+    stmt.run(...params)
     this.nextTick(callback)
   }
 
