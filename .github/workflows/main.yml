@@ -73,10 +73,9 @@ jobs:
         id: generate-token
         with:
           # uses https://github.com/organizations/tinacms/settings/apps/release-bot-allow-prs-and-push
-          # TODO: migrate to `client-id` once the BOT_APP_ID secret value is confirmed/swapped
-          # to the App's Client ID (Iv23li…). `app-id` is deprecated in v3 but still accepted;
-          # see https://github.com/organizations/tinacms/settings/apps/release-bot-allow-prs-and-push
-          app-id: ${{ secrets.BOT_APP_ID }}
+          # BOT_APP_ID holds the App's Client ID (Iv23li…), so use `client-id`. `app-id` is
+          # deprecated in v3 and rejects non-numeric values, which broke the publish job.
+          client-id: ${{ secrets.BOT_APP_ID }}
           private-key: ${{ secrets.BOT_APP_SECRET }}
 
       - uses: actions/checkout@v6
