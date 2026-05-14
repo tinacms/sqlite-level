@@ -1,5 +1,11 @@
 # sqlite-level
 
+## 2.0.0
+
+### Major Changes
+
+- 37f893e: feat: remove cjs support, move to esm
+
 ## 1.2.1
 
 ### Patch Changes
