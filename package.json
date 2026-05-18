@@ -47,10 +47,10 @@
     "module-error": "^1.0.2"
   },
   "devDependencies": {
-    "@changesets/cli": "2.27.8",
-    "@types/better-sqlite3": "^7.6.12",
-    "typedoc": "^0.28.15",
-    "typescript": "^5.7.3",
+    "@changesets/cli": "2.31.0",
+    "@types/better-sqlite3": "^7.6.13",
+    "typedoc": "^0.28.19",
+    "typescript": "^5.9.3",
     "vitest": "^2.1.0"
   },
   "publishConfig": {
