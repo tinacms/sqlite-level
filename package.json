@@ -43,7 +43,7 @@
   },
   "dependencies": {
     "abstract-level": "^1.0.4",
-    "better-sqlite3": "^12.9.0",
+    "better-sqlite3": "^12.10.0",
     "module-error": "^1.0.2"
   },
   "devDependencies": {
