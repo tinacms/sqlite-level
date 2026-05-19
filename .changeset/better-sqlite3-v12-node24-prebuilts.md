@@ -1,0 +1,17 @@
+---
+"sqlite-level": minor
+---
+
+Bump `better-sqlite3` from `^11.8.1` to `^12.10.0` so consumers pick up Node-24 (`NODE_MODULE_VERSION 137`) prebuilt binaries. The `better-sqlite3` v11.x line tops out at Node 23 prebuilts (`node-v131`), so a fresh `npm install` on Node 24 falls back to `node-gyp rebuild` and fails without a local Python + C++ toolchain (see [tinacms/tinacms#6686](https://github.com/tinacms/tinacms/issues/6686)). `better-sqlite3@12` adds Node 24 to its build matrix and drops EOL Node 18 — no API changes affect `SqliteLevel`'s usage of `Database`, `prepare`, `exec`, or `iterate`.
+
+**Platform-support narrowing — please read if you're on Node 20 or 23:**
+
+This caret pin (`^12.10.0`) resolves to `better-sqlite3@12.10.0`, whose [release notes](https://github.com/WiseLibs/better-sqlite3/releases/tag/v12.10.0) call out: *"Add support for Node.js v26 prebuilds and remove EOL builds (Node.js v20, v23)"*. So the prebuild matrix is now **Node 22, 24, 25, 26** only. Consumers on:
+
+- **Node 20** (LTS — reached EOL 2026-04-30): install will fall back to `node-gyp rebuild` and require a local Python + C++ toolchain. Same failure mode this PR fixes for Node 24, just on a different Node major. Upgrading to Node 22 LTS is the recommended path.
+- **Node 23** (non-LTS, EOL 2025-06-01): same install failure.
+- **Node 18** (EOL 2025-04-30): unchanged — better-sqlite3 v12 dropped Node 18 in its `engines` field. Was already not picking up Node 18 prebuilds.
+
+Tina-first-party consumers (TinaCloud content-api, TinaCMS's `@tinacms/search`, the `tina-self-hosted-demo` example) all target Node 22+ and are unaffected.
+
+Picks up the work in [#25](https://github.com/tinacms/sqlite-level/pull/25) (closed unmerged), now rebased onto the post-ESM v2.0.0 main.
