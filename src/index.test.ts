@@ -702,4 +702,148 @@ describe('sqlite-level', () => {
       expect(await level.get(keyWithBackslash)).toEqual(valueWithBackslash)
     })
   })
+
+  describe('legacy v1-format migration (no UNIQUE on key)', () => {
+    // sqlite-level <2.0.0 created `kv (key TEXT, value TEXT)` with no UNIQUE
+    // constraint on `key`. Opening such a file with 2.0+ used to throw
+    // `SqliteError: ON CONFLICT clause does not match any PRIMARY KEY or
+    // UNIQUE constraint` on the first put/batch/clear. These tests cover the
+    // _open() backfill that adds the constraint (deduplicating rows first).
+    let tempDir: string
+    let dbPath: string
+
+    beforeEach(() => {
+      tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'sqlite-level-v1-'))
+      dbPath = path.join(tempDir, 'legacy.db')
+    })
+
+    afterEach(() => {
+      fs.rmSync(tempDir, { recursive: true, force: true })
+    })
+
+    // Materialise a database file the way sqlite-level <2.0.0 would have: kv
+    // table with no UNIQUE constraint, populated via plain INSERT (which is
+    // how pre-2.0 wrote, and which allows duplicate-key rows).
+    const seedV1Database = async (
+      rows: Array<{ key: string; value: string }>
+    ) => {
+      const Database = (await import('better-sqlite3')).default
+      const raw = new Database(dbPath)
+      raw.exec('CREATE TABLE kv (key TEXT, value TEXT)')
+      const insert = raw.prepare('INSERT INTO kv (key, value) VALUES (?, ?)')
+      for (const { key, value } of rows) insert.run(key, value)
+      raw.close()
+    }
+
+    it('put/batch/clear succeed against a v1-format file (no duplicates)', async () => {
+      await seedV1Database([
+        { key: 'a', value: '1' },
+        { key: 'b', value: '2' },
+      ])
+
+      const level = new SqliteLevel<string, string>({ filename: dbPath })
+      await level.open()
+
+      // Reads still work
+      expect(await level.get('a')).toEqual('1')
+      expect(await level.get('b')).toEqual('2')
+
+      // The pre-fix failure mode: put fails because ON CONFLICT(key) has no
+      // matching UNIQUE constraint. After the migration this succeeds.
+      await level.put('a', '1-updated')
+      expect(await level.get('a')).toEqual('1-updated')
+
+      await level.batch([
+        { type: 'put', key: 'b', value: '2-updated' },
+        { type: 'put', key: 'c', value: '3' },
+      ])
+      expect(await level.get('b')).toEqual('2-updated')
+      expect(await level.get('c')).toEqual('3')
+
+      await level.clear()
+      await expect(level.get('a')).rejects.toThrow(keyNotFoundError('a'))
+
+      await level.close()
+    })
+
+    it('deduplicates rows for keys that appear multiple times (last-write-wins)', async () => {
+      // Pre-2.0 INSERTs appended duplicate rows when the same key was put
+      // twice. _get used `stmt.get()` which returned the FIRST matching
+      // row, but on disk the LAST INSERT is the most recently written value.
+      // We pick MAX(rowid) to preserve "last write wins" — matches 2.0+
+      // upsert semantics customers will expect after the bump.
+      await seedV1Database([
+        { key: 'k1', value: 'first' },
+        { key: 'k2', value: 'only' },
+        { key: 'k1', value: 'middle' },
+        { key: 'k1', value: 'latest' },
+      ])
+
+      const level = new SqliteLevel<string, string>({ filename: dbPath })
+      await level.open()
+
+      expect(await level.get('k1')).toEqual('latest')
+      expect(await level.get('k2')).toEqual('only')
+
+      // Subsequent writes must still hit the UNIQUE path cleanly
+      await level.put('k1', 'rewritten')
+      expect(await level.get('k1')).toEqual('rewritten')
+
+      // And the table should contain exactly one row per key
+      const entries: [string, string][] = []
+      for await (const entry of level.iterator()) {
+        entries.push(entry as [string, string])
+      }
+      expect(entries).toEqual([
+        ['k1', 'rewritten'],
+        ['k2', 'only'],
+      ])
+
+      await level.close()
+    })
+
+    it('is idempotent: re-opening after migration is a no-op', async () => {
+      await seedV1Database([{ key: 'a', value: '1' }])
+
+      const first = new SqliteLevel<string, string>({ filename: dbPath })
+      await first.open()
+      await first.put('a', '1-updated')
+      await first.close()
+
+      // Second open should detect the UNIQUE index from the first migration
+      // and skip the dedupe path entirely.
+      const second = new SqliteLevel<string, string>({ filename: dbPath })
+      await second.open()
+      expect(await second.get('a')).toEqual('1-updated')
+      await second.put('a', '1-twice')
+      expect(await second.get('a')).toEqual('1-twice')
+      await second.close()
+    })
+
+    it('does not touch freshly-created v2 files (migration short-circuits)', async () => {
+      // Open a fresh file via 2.0+ (no seeding), close, reopen. The migration
+      // detector must see the autoindex from the column-level UNIQUE and not
+      // attempt any DELETE/CREATE INDEX on subsequent opens.
+      const fresh = new SqliteLevel<string, string>({ filename: dbPath })
+      await fresh.open()
+      await fresh.put('x', 'y')
+      await fresh.close()
+
+      // Confirm no explicit kv_key_unique index was created (only the
+      // sqlite_autoindex_* from the column-level UNIQUE).
+      const Database = (await import('better-sqlite3')).default
+      const raw = new Database(dbPath, { readonly: true })
+      const indexes = raw
+        .prepare("SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'kv'")
+        .all() as Array<{ name: string }>
+      raw.close()
+      expect(indexes.some((i) => i.name === 'kv_key_unique')).toBe(false)
+      expect(indexes.some((i) => i.name.startsWith('sqlite_autoindex_kv'))).toBe(true)
+
+      const reopened = new SqliteLevel<string, string>({ filename: dbPath })
+      await reopened.open()
+      expect(await reopened.get('x')).toEqual('y')
+      await reopened.close()
+    })
+  })
 })

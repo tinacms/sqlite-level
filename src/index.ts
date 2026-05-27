@@ -226,6 +226,41 @@ export class SqliteLevel<KDefault = string, VDefault = string> extends AbstractL
 
   async _open(options: AbstractOpenOptions, callback: (error?: Error) => void) {
     this.db.exec('CREATE TABLE IF NOT EXISTS kv (key TEXT UNIQUE, value TEXT)')
+
+    // Backfill UNIQUE on `key` for databases originally created by sqlite-level
+    // <2.0.0. Pre-2.0 declared the table as `kv (key TEXT, value TEXT)` (no
+    // UNIQUE) and inserted with a plain `INSERT INTO kv …`. The 2.0 statements
+    // use `INSERT … ON CONFLICT(key) DO UPDATE`, which SQLite rejects unless
+    // `key` has a UNIQUE constraint or matching UNIQUE index — opening a
+    // pre-2.0 file without this backfill throws `SqliteError: ON CONFLICT
+    // clause does not match any PRIMARY KEY or UNIQUE constraint` on the
+    // first put/batch/clear. The `CREATE TABLE IF NOT EXISTS` above is a
+    // no-op against an existing table so cannot fix the missing constraint
+    // on its own.
+    //
+    // Detect by looking for a UNIQUE index whose single column is `key`
+    // (covers both the column-level `UNIQUE` autoindex written by ≥2.0 and
+    // any explicit UNIQUE INDEX). If absent, deduplicate (last write wins —
+    // pre-2.0 INSERTs appended duplicate rows but only the first row was
+    // ever returned by `_get`, so collapsing to MAX(rowid) preserves the
+    // most recently written value) and create the index. Idempotent: on a
+    // freshly-created v2 file this short-circuits at the SELECT.
+    const hasUniqueOnKey = this.db
+      .prepare(
+        `SELECT 1 FROM pragma_index_list('kv') il
+          WHERE il."unique" = 1
+            AND (SELECT COUNT(*) FROM pragma_index_info(il.name)) = 1
+            AND (SELECT name FROM pragma_index_info(il.name)) = 'key'
+          LIMIT 1`
+      )
+      .get()
+    if (!hasUniqueOnKey) {
+      this.db.exec(
+        `DELETE FROM kv WHERE rowid NOT IN (SELECT MAX(rowid) FROM kv GROUP BY key);
+         CREATE UNIQUE INDEX kv_key_unique ON kv (key);`
+      )
+    }
+
     this.nextTick(callback)
   }
 
