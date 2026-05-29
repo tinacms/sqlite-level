@@ -820,6 +820,53 @@ describe('sqlite-level', () => {
       await second.close()
     })
 
+    it('does not migrate when opened with readOnly: true', async () => {
+      // A consumer opening a legacy file in read-only mode should not have
+      // its file mutated. _get works against the v1 schema unchanged, and
+      // _put/_batch/_clear are gated by the readOnly check upstream — so the
+      // migration's writes are both unnecessary and unwanted here.
+      await seedV1Database([
+        { key: 'a', value: '1' },
+        { key: 'a', value: '2' },
+      ])
+
+      const readOnlyLevel = new SqliteLevel<string, string>({
+        filename: dbPath,
+        readOnly: true,
+      })
+      await readOnlyLevel.open()
+
+      // Reads still work against the un-migrated v1 schema. Pre-2.0 _get
+      // returned the first matching row by rowid, which is preserved here
+      // because the migration didn't run.
+      expect(await readOnlyLevel.get('a')).toEqual('1')
+
+      // Writes are rejected upstream, never reaching SQLite.
+      await expect(readOnlyLevel.put('a', '3')).rejects.toThrow(
+        new ModuleError('not authorized to write to branch', {
+          code: 'LEVEL_READ_ONLY',
+        })
+      )
+
+      await readOnlyLevel.close()
+
+      // Confirm the file on disk was not mutated: no kv_key_unique index,
+      // and the original duplicate rows are still present.
+      const Database = (await import('better-sqlite3')).default
+      const raw = new Database(dbPath, { readonly: true })
+      const indexes = raw
+        .prepare(
+          "SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'kv'"
+        )
+        .all() as Array<{ name: string }>
+      const rowCount = (
+        raw.prepare('SELECT COUNT(*) AS n FROM kv').get() as { n: number }
+      ).n
+      raw.close()
+      expect(indexes.some((i) => i.name === 'kv_key_unique')).toBe(false)
+      expect(rowCount).toEqual(2)
+    })
+
     it('does not touch freshly-created v2 files (migration short-circuits)', async () => {
       // Open a fresh file via 2.0+ (no seeding), close, reopen. The migration
       // detector must see the autoindex from the column-level UNIQUE and not
